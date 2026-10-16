@@ -1,4 +1,4 @@
-# 尚舆分析平台
+# 舆情分析助手
 
 多专家圆桌讨论的 AI 深度舆情研究平台。三个 Agent 协作产出舆情报告：
 
@@ -7,6 +7,8 @@
 - **Host（研判智能体）** — 按五个维度对两个 Agent 的产出做阶段裁判，最后汇总为综合报告
 
 后端 FastAPI + LangGraph，前端 Vue 3 + Vite。
+
+前端为浅色主题的左侧导航工作台，样式基于自建设计令牌（`front/src/assets/global.css`），除 Vue 外无 UI 框架依赖；实时进度通过 SSE 推送。
 
 ## 环境要求
 
@@ -65,10 +67,12 @@ npm run dev
 
 ## 四、使用流程
 
-1. **研究** — 输入主题 → 自动 `stopHost`/`startHost` 后启动 insight + media 两个 Agent；SSE 实时推进度
-2. **主持人研判** — 每个 Agent 的章节产出会触发 Host 的维度裁判，可在该页查看讨论记录
-3. **综合报告** — 三个角色的报告都落盘后 `输入就绪`，点击生成由 LLM 汇总的 HTML/Markdown 报告
-4. **系统配置** — 在线修改 LLM / 搜索 / 数据库配置，写回根目录 `.env`（部分改动需重启）
+界面为左侧导航的四个页面，串成一条流水线：
+
+1. **研究** — 输入主题（可点示例标签填入）→ 自动 `stopHost`/`startHost` 后启动 insight + media 两个 Agent；两张引擎卡片实时显示进度、阶段文字与完成后的摘要
+2. **主持人** — 每个 Agent 的章节产出会触发 Host 的维度裁判；页面每 3 秒同步一次，按五个维度分开展示主持人裁判与双引擎原文摘要
+3. **报告** — 三个角色的报告都落盘后状态条显示「输入数据已就绪」，点击生成由 LLM 汇总的报告，可在线预览并导出 HTML / Markdown
+4. **配置** — 在线修改 LLM / 搜索 / 数据库配置；改动字段会高亮、底部浮出保存条，保存后写回根目录 `.env`（部分改动需重启）
 
 ## 五、数据依赖
 
@@ -97,19 +101,20 @@ Insight Agent 会查询以下 MySQL 表（表名与字段在
 | `ModuleNotFoundError: FlagEmbedding` | 启用了 `INSIGHT_VECTOR_ENABLED=true` 但未装 ml 依赖组 |
 | 控制台中文日志乱码 | Windows 控制台编码问题，执行 `chcp 65001` 后重跑 |
 | 数据库连接失败 | Insight 检索会捕获异常并返回空结果，检查 `.env` 的 `DB_*` 与表结构 |
-| 报告页提示"输入文件未准备就绪" | `data/report/{insight,media,host}` 三个目录都要有 `.md` 报告 |
+| 报告页「输入数据」一直显示未就绪 | `data/report/{insight,media,host}` 三个目录都要有 `.md` 报告 |
 | 前端页面空白 | 后端未启动，或端口不是 5000（需同步改 `front/vite.config.js` 的 proxy） |
 | `npm audit` 报高危 | 均来自 vite 开发链路的间接依赖，不影响本地使用，可 `npm audit fix` |
+| 界面字体与预期不符 | 字体从 Google Fonts 加载，离线或网络受限时回退到系统字体，不影响功能 |
 
 ## 八、目录结构
 
-```
+```text
 app/         FastAPI 应用层：routers(REST/SSE)、services、schemas、依赖注入
 engines/     引擎层：三个 Agent、报告引擎、编排、公共节点/事件总线/日志
   contracts/  角色定义、五维维度、证据模型、全局配置(.env 读取)
   common/     事件总线、LLM 客户端、LangGraph 公共节点、报告落盘
 data/report/  各角色与最终报告的落盘目录
-front/        Vue 3 前端
+front/        Vue 3 前端(Vite)：views 页面 / components 组件 / services 接口 / composables 状态
 test/         学习/调试用脚本(不是真正的单元测试)
 logs/         按角色分流的运行日志
 ```

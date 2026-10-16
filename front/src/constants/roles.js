@@ -4,16 +4,22 @@ export const ROLE_LABELS = {
 }
 
 export const ROLE_SUBTITLE = {
-  insight: '数据库深度检索',
+  insight: '私域数据库深度检索',
   media: '全媒体舆情监控',
 }
 
 export const RESEARCH_ROLE_ORDER = ['insight', 'media']
 
+/* 双引擎配色：一个冷（海军蓝），一个暖（赤陶），进程一眼可分 */
+export const ROLE_TONE = {
+  insight: 'navy',
+  media: 'clay',
+}
+
 export const SENDER_STYLE = {
-  insight: { color: 'var(--amber)', icon: '◆', label: '数据挖掘', role: '数据挖掘' },
-  media: { color: 'var(--blue-steel)', icon: '◇', label: '舆情分析', role: '舆情分析' },
-  host: { color: 'var(--paper)', icon: '◈', label: '主持人', role: '主持人' },
+  insight: { color: 'var(--navy-soft)', label: '数据挖掘' },
+  media: { color: 'var(--clay)', label: '舆情分析' },
+  host: { color: 'var(--ink)', label: '主持人' },
 }
 
 export const DEFAULT_RESEARCH_DIMENSIONS = [
@@ -23,3 +29,6 @@ export const DEFAULT_RESEARCH_DIMENSIONS = [
   { key: 'platform_and_group_diff', title: '平台与群体差异', index: '04' },
   { key: 'deep_causes_and_impact', title: '深层原因与影响', index: '05' },
 ]
+
+/* 输入框下的示例话题，点击即填入 */
+export const EXAMPLE_TOPICS = ['AI 换脸诈骗', '网络谣言治理', '直播带货消费维权']

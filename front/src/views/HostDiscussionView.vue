@@ -1,11 +1,11 @@
 <script setup>
-import { computed, ref, onUnmounted, nextTick } from 'vue'
+import { computed, nextTick, onUnmounted, ref } from 'vue'
 import { startHost, stopHost, getHostDiscussionLog } from '../composables/api.js'
 import { DEFAULT_RESEARCH_DIMENSIONS } from '../constants/roles.js'
-import HostDiscussionControls from '../components/HostDiscussionControls.vue'
-import HostDiscussionDimensionList from '../components/HostDiscussionDimensionList.vue'
-import HostDiscussionEmptyState from '../components/HostDiscussionEmptyState.vue'
-import HostDiscussionFinalMessages from '../components/HostDiscussionFinalMessages.vue'
+import PageHeading from '../components/PageHeading.vue'
+import HostControls from '../components/HostControls.vue'
+import DimensionPanel from '../components/DimensionPanel.vue'
+import FinalJudgements from '../components/FinalJudgements.vue'
 
 const messages = ref([])
 const researchDimensions = ref(DEFAULT_RESEARCH_DIMENSIONS)
@@ -15,12 +15,12 @@ const error = ref('')
 let pollTimer = null
 
 const finalHostMessages = computed(() =>
-  messages.value.filter(msg => msg.source === 'host' && !msg.dimension_key)
+  messages.value.filter((msg) => msg.source === 'host' && !msg.dimension_key)
 )
 
 const dimensionRows = computed(() =>
-  researchDimensions.value.map(dimension => {
-    const scoped = messages.value.filter(msg => msg.dimension_key === dimension.key)
+  researchDimensions.value.map((dimension) => {
+    const scoped = messages.value.filter((msg) => msg.dimension_key === dimension.key)
     return {
       ...dimension,
       insight: latestBySpeaker(scoped, 'insight'),
@@ -31,17 +31,19 @@ const dimensionRows = computed(() =>
   })
 )
 
-const hasStructuredMessages = computed(() =>
-  finalHostMessages.value.length || dimensionRows.value.some(row => row.count)
+const hasStructuredMessages = computed(
+  () => finalHostMessages.value.length || dimensionRows.value.some((row) => row.count)
 )
 
+const settledCount = computed(() => dimensionRows.value.filter((row) => row.host).length)
+
 function latestBySpeaker(items, source) {
-  return [...items].reverse().find(msg => msg.source === source) || null
+  return [...items].reverse().find((msg) => msg.source === source) || null
 }
 
 function normalizeDiscussionRecords(data) {
   const records = data?.discussion_records || data?.parsed_messages || []
-  return records.map(record => ({
+  return records.map((record) => ({
     source: record.source || '',
     message_text: record.message_text || record.content || '',
     sent_at: record.sent_at || record.timestamp || '',
@@ -103,7 +105,7 @@ function stopPolling() {
 }
 
 function isDiscussionComplete() {
-  return finalHostMessages.value.length > 0 && dimensionRows.value.every(row => row.host)
+  return finalHostMessages.value.length > 0 && dimensionRows.value.every((row) => row.host)
 }
 
 function hasDiscussionChanged(nextMessages) {
@@ -114,13 +116,13 @@ function hasDiscussionChanged(nextMessages) {
 }
 
 function isNearBottom() {
-  const el = document.querySelector('.host-discussion-content')
+  const el = document.querySelector('.discussion-scroll')
   if (!el) return true
   return el.scrollHeight - el.scrollTop - el.clientHeight < 80
 }
 
 function scrollToBottom() {
-  const el = document.querySelector('.host-discussion-content')
+  const el = document.querySelector('.discussion-scroll')
   if (el) el.scrollTop = el.scrollHeight
 }
 
@@ -130,14 +132,20 @@ refreshLog()
 </script>
 
 <template>
-  <div class="host-discussion-view">
-    <header class="view-header stagger-1">
-      <div class="header-overline">HOST DISCUSSION</div>
-      <h2 class="view-title">主持人研判讨论</h2>
-      <p class="view-desc">主持人按五个研究维度对齐双 Agent 输出，沉淀阶段裁判与最终研判</p>
-    </header>
+  <div class="host-view">
+    <PageHeading
+      kicker="Host"
+      title="主持人研判讨论"
+      desc="主持人按五个研究维度对齐双引擎输出，沉淀阶段裁判与最终研判结论。"
+    >
+      <template #actions>
+        <span v-if="messages.length" class="progress-chip">
+          阶段裁判 {{ settledCount }}/{{ dimensionRows.length }}
+        </span>
+      </template>
+    </PageHeading>
 
-    <HostDiscussionControls
+    <HostControls
       :running="hostRunning"
       :loading="loading"
       @start="handleStart"
@@ -145,57 +153,50 @@ refreshLog()
       @refresh="refreshLog"
     />
 
-    <div v-if="error" class="error-msg">{{ error }}</div>
-
-    <div v-if="messages.length" class="host-discussion-content stagger-3">
-      <HostDiscussionFinalMessages :messages="finalHostMessages" />
-      <HostDiscussionDimensionList v-if="hasStructuredMessages" :rows="dimensionRows" />
+    <div v-if="error" class="notice notice--error">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 8v5M12 16h.01" />
+      </svg>
+      {{ error }}
     </div>
 
-    <HostDiscussionEmptyState v-else :running="hostRunning" />
+    <div v-if="messages.length" class="discussion-scroll rise-3">
+      <FinalJudgements :messages="finalHostMessages" />
+      <DimensionPanel v-if="hasStructuredMessages" :rows="dimensionRows" />
+    </div>
+
+    <div v-else class="empty-state rise-3">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 14.5a2 2 0 0 1-2 2H8l-4 3.5V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z" />
+      </svg>
+      <p class="empty-title">{{ hostRunning ? '主持人已启动，等待讨论内容' : '主持人尚未启动' }}</p>
+      <p class="empty-desc">
+        {{ hostRunning ? '双引擎发言后将自动汇聚到这里' : '点击「启动主持人」开始多维研判，或在「研究」页发起分析时自动启动' }}
+      </p>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.view-header {
-  margin-bottom: 2rem;
-}
-
-.header-overline {
+.progress-chip {
   font-family: var(--font-mono);
-  font-size: 0.65rem;
-  letter-spacing: 0.25em;
-  color: var(--amber);
-  opacity: 0.7;
-  margin-bottom: 0.5rem;
+  font-size: 0.72rem;
+  color: var(--navy-soft);
+  background: var(--navy-tint);
+  border: 1px solid var(--navy-line);
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
 }
 
-.view-title {
-  font-size: clamp(1.8rem, 4vw, 2.4rem);
-  color: var(--paper);
-  margin-bottom: 0.4rem;
-  letter-spacing: 0.02em;
-}
-
-.view-desc {
-  color: var(--paper-dim);
-  font-size: 0.9rem;
-  line-height: 1.6;
-}
-
-.error-msg {
-  margin-bottom: 1rem;
-  padding: 0.8rem 1rem;
-  color: var(--red);
-  background: var(--red-ghost);
-  border: 1px solid rgba(196, 75, 60, 0.25);
-  border-radius: var(--radius);
-  font-size: 0.82rem;
-}
-
-.host-discussion-content {
-  max-height: 66vh;
+.discussion-scroll {
+  max-height: 68vh;
   overflow-y: auto;
-  padding-right: 0.5rem;
+  padding-right: 0.6rem;
+  margin-top: 1.2rem;
+}
+
+.notice {
+  margin-bottom: 1.1rem;
 }
 </style>

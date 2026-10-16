@@ -1,6 +1,13 @@
 <script setup>
-import { ref } from 'vue'
-import { getReportStatus, generateReport, getReportResult, getMarkdownUrl, getReportDownloadUrl } from '../composables/api.js'
+import { onMounted, ref } from 'vue'
+import {
+  getReportStatus,
+  generateReport,
+  getReportResult,
+  getReportDownloadUrl,
+  getMarkdownUrl,
+} from '../composables/api.js'
+import PageHeading from '../components/PageHeading.vue'
 
 const status = ref(null)
 const generating = ref(false)
@@ -8,7 +15,10 @@ const reportQuery = ref('智能舆情分析报告')
 const taskId = ref('')
 const reportHtml = ref('')
 const error = ref('')
-const pollCount = ref(0)
+const elapsed = ref(0)
+const showFiles = ref(false)
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 async function refreshStatus() {
   try {
@@ -18,18 +28,21 @@ async function refreshStatus() {
 
 async function startReport() {
   if (!status.value?.prepared) {
-    error.value = '输入文件未准备就绪'
+    error.value = '输入文件未准备就绪，请先完成一次舆情研究'
     return
   }
   generating.value = true
   error.value = ''
   reportHtml.value = ''
-  pollCount.value = 0
+  elapsed.value = 0
   try {
     const res = await generateReport(reportQuery.value)
     if (res?.task_id) {
       taskId.value = res.task_id
       pollResult(res.task_id)
+    } else {
+      error.value = '任务创建失败，未返回任务号'
+      generating.value = false
     }
   } catch (e) {
     error.value = e.message || '报告生成失败'
@@ -40,16 +53,14 @@ async function startReport() {
 async function pollResult(tid) {
   const maxPolls = 90
   for (let i = 0; i < maxPolls; i++) {
-    await new Promise(r => setTimeout(r, 2000))
-    try {
-      const html = await getReportResult(tid)
-      pollCount.value = i + 1
-      if (html && !html.includes('尚未完成')) {
-        reportHtml.value = html
-        generating.value = false
-        return
-      }
-    } catch {}
+    await sleep(2000)
+    elapsed.value = (i + 1) * 2
+    const html = await getReportResult(tid).catch(() => null)
+    if (html) {
+      reportHtml.value = html
+      generating.value = false
+      return
+    }
   }
   error.value = '报告生成超时，请稍后重试'
   generating.value = false
@@ -63,389 +74,371 @@ function downloadMarkdown() {
   window.open(getMarkdownUrl(taskId.value), '_blank')
 }
 
-refreshStatus()
+function formatElapsed(seconds) {
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return m ? `${m}分${String(s).padStart(2, '0')}秒` : `${s} 秒`
+}
+
+onMounted(refreshStatus)
 </script>
 
 <template>
   <div class="report-view">
-    <header class="view-header stagger-1">
-      <div class="header-overline">REPORT</div>
-      <h2 class="view-title">综合报告生成</h2>
-      <p class="view-desc">基于主持人裁判与双 Agent 证据，LLM 自动生成完整的舆情研究报告</p>
-    </header>
+    <PageHeading
+      kicker="Report"
+      title="综合报告生成"
+      desc="汇总主持人最终裁判与双引擎证据，由 LLM 生成结构化舆情研究报告，可导出 HTML 或 Markdown。"
+    >
+      <template #actions>
+        <button class="btn btn--ghost" @click="refreshStatus">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 1 0 2.6-6.4M3 4v5h5" />
+          </svg>
+          刷新状态
+        </button>
+      </template>
+    </PageHeading>
 
-    <!-- Status bar -->
-    <div class="status-bar stagger-2">
-      <div class="status-grid">
-        <div class="status-cell" v-if="status">
-          <span class="status-key">输入就绪</span>
-          <span class="status-val" :class="{ ok: status.prepared }">
-            <span class="status-dot" :class="{ ok: status.prepared }"></span>
-            {{ status.prepared ? '已就绪' : '未就绪' }}
-          </span>
-        </div>
-        <div class="status-cell" v-if="status?.found_files?.length">
-          <span class="status-key">可用文件</span>
-          <span class="status-val">{{ status.found_files.length }} 个</span>
-        </div>
-        <div class="status-cell" v-if="generating">
-          <span class="status-key">轮询次数</span>
-          <span class="status-val">{{ pollCount }}</span>
-        </div>
+    <!-- 输入就绪状态 -->
+    <div class="status-strip rise-2">
+      <div class="status-item">
+        <span class="status-key">输入数据</span>
+        <span class="status-val" :class="status?.prepared ? 'is-ok' : 'is-off'">
+          <span class="dot" :class="{ 'dot--live': status?.prepared }"></span>
+          {{ status?.prepared ? '已就绪' : '未就绪' }}
+        </span>
       </div>
-      <button class="refresh-btn" @click="refreshStatus">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M1 4v6h6M23 20v-6h-6"/>
-          <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
-        </svg>
-        刷新
-      </button>
+      <div class="status-item">
+        <span class="status-key">可用文件</span>
+        <button
+          class="status-val is-link"
+          type="button"
+          :disabled="!status?.found_files?.length"
+          @click="showFiles = !showFiles"
+        >
+          {{ status?.found_files?.length || 0 }} 个
+          <svg v-if="status?.found_files?.length" class="caret" :class="{ open: showFiles }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
+      </div>
+      <div v-if="generating" class="status-item">
+        <span class="status-key">已用时</span>
+        <span class="status-val is-busy">{{ formatElapsed(elapsed) }}</span>
+      </div>
+      <p v-if="!status?.prepared" class="status-tip">
+        报告输入取自最近一次研究结果，请先在「研究」页完成分析
+      </p>
     </div>
 
-    <!-- Generate -->
-    <section class="generate-section stagger-3">
-      <div class="generate-card">
-        <div class="generate-input-wrap">
-          <input
-            v-model="reportQuery"
-            class="generate-input"
-            placeholder="输入报告主题，留空则自动聚合当前分析结果..."
-            :disabled="generating"
-          />
-          <button class="generate-btn" @click="startReport" :disabled="generating || !reportQuery.trim() || !status?.prepared">
-            <svg v-if="!generating" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="12" y1="18" x2="12" y2="12"/>
-              <line x1="9" y1="15" x2="15" y2="15"/>
-            </svg>
-            <span v-if="!generating">生成报告</span>
-            <span v-else class="generating-label">
-              <span class="gen-dot"></span>
-              正在生成报告...
-            </span>
-          </button>
-        </div>
-        <p class="generate-hint">LLM 将优先聚合主持人最终裁判，并结合 Insight / Media 证据生成 Markdown 与 HTML 报告</p>
+    <ul v-if="showFiles && status?.found_files?.length" class="file-list rise-2">
+      <li v-for="file in status.found_files" :key="file">{{ file }}</li>
+    </ul>
+
+    <!-- 生成 -->
+    <section class="generate rise-3">
+      <label class="field-label" for="report-query">报告主题</label>
+      <div class="generate-row">
+        <input
+          id="report-query"
+          v-model="reportQuery"
+          class="generate-input"
+          type="text"
+          placeholder="例如：AI 换脸诈骗舆情分析报告"
+          :disabled="generating"
+        />
+        <button
+          class="btn btn--primary"
+          :disabled="generating || !reportQuery.trim() || !status?.prepared"
+          @click="startReport"
+        >
+          <span v-if="generating" class="spinner"></span>
+          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+            <path d="M14 3v5h5" />
+          </svg>
+          {{ generating ? '生成中…' : '生成报告' }}
+        </button>
       </div>
+      <p class="generate-hint">生成过程约需 1–3 分钟，期间可切换到其他页面，任务不会中断。</p>
     </section>
 
-    <!-- Error -->
-    <div v-if="error" class="error-msg stagger-3">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="15" y1="9" x2="9" y2="15"/>
-        <line x1="9" y1="9" x2="15" y2="15"/>
+    <div v-if="error" class="notice notice--error rise-3">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 8v5M12 16h.01" />
       </svg>
       {{ error }}
     </div>
 
-    <!-- Report output -->
-    <section v-if="reportHtml" class="report-output stagger-4">
-      <div class="output-toolbar">
-        <h3 class="output-title">报告预览</h3>
+    <!-- 生成中的占位 -->
+    <section v-if="generating && !reportHtml" class="panel generating-panel rise-3">
+      <div class="generating-body">
+        <span class="spinner big"></span>
+        <div>
+          <p class="generating-title">正在生成报告</p>
+          <p class="generating-desc">LLM 正在整合主持人裁判与双引擎证据，请稍候…</p>
+        </div>
+      </div>
+      <div class="scan-bar"><span></span></div>
+    </section>
+
+    <!-- 结果 -->
+    <section v-if="reportHtml" class="output rise-4">
+      <div class="output-bar">
+        <h2 class="output-title">报告预览</h2>
         <div class="output-actions">
-          <button class="action-btn" @click="downloadReport">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
+          <button class="btn btn--ghost" @click="downloadReport">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3v12M7 11l5 5 5-5M5 21h14" />
             </svg>
             下载 HTML
           </button>
-          <button class="action-btn" @click="downloadMarkdown">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
+          <button class="btn btn--ghost" @click="downloadMarkdown">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+              <path d="M14 3v5h5M9 14h6M9 17h3" />
             </svg>
             导出 Markdown
           </button>
         </div>
       </div>
-      <div class="report-frame" v-html="reportHtml"></div>
+      <div class="report-frame">
+        <div class="prose" v-html="reportHtml"></div>
+      </div>
     </section>
   </div>
 </template>
 
 <style scoped>
-/* ================================================================
-   ReportView — Editorial report generation
-   ================================================================ */
-
-.view-header {
-  margin-bottom: 2rem;
-}
-
-.header-overline {
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  letter-spacing: 0.25em;
-  color: var(--amber);
-  margin-bottom: 0.5rem;
-  opacity: 0.7;
-}
-
-.view-title {
-  font-size: clamp(1.8rem, 4vw, 2.4rem);
-  color: var(--paper);
-  margin-bottom: 0.4rem;
-  letter-spacing: 0.02em;
-}
-
-.view-desc {
-  color: var(--paper-dim);
-  font-size: 0.9rem;
-  line-height: 1.6;
-}
-
-/* Status bar */
-.status-bar {
+/* —— 状态条 —— */
+.status-strip {
   display: flex;
-  align-items: flex-start;
-  gap: 1.5rem;
-  padding: 1.2rem 1.5rem;
-  background: var(--ink-light);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  margin-bottom: 1.8rem;
+  align-items: center;
+  gap: 2.2rem;
   flex-wrap: wrap;
+  padding: 0.9rem 1.3rem;
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-xs);
+  margin-bottom: 1.6rem;
 }
 
-.status-grid {
+.status-item {
   display: flex;
-  gap: 2.5rem;
-  flex-wrap: wrap;
-  flex: 1;
-}
-
-.status-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+  align-items: center;
+  gap: 0.6rem;
 }
 
 .status-key {
-  font-size: 0.68rem;
-  color: var(--paper-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-size: 0.76rem;
+  color: var(--ink-faint);
 }
 
 .status-val {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   font-family: var(--font-mono);
-  font-size: 0.85rem;
-  color: var(--paper-dim);
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-.status-val.ok {
-  color: var(--teal);
-}
-
-.status-dot {
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: var(--paper-muted);
-}
-.status-dot.ok {
-  background: var(--teal);
-}
-
-.refresh-btn {
-  padding: 0.45rem 1rem;
-  background: none;
-  color: var(--paper-dim);
   font-size: 0.78rem;
-  border: 1px solid var(--border-strong);
-  border-radius: 20px;
+  color: var(--ink-soft);
+}
+.status-val.is-ok {
+  color: var(--green);
+}
+.status-val.is-off {
+  color: var(--ink-ghost);
+}
+.status-val.is-busy {
+  color: var(--clay-deep);
+}
+.status-val.is-link {
+  color: var(--navy-soft);
+  border-bottom: 1px dashed var(--line-strong);
+}
+.status-val.is-link:hover:not(:disabled) {
+  color: var(--clay-deep);
+}
+
+.caret {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.2s var(--ease-soft);
+}
+.caret.open {
+  transform: rotate(180deg);
+}
+
+.status-tip {
+  margin-left: auto;
+  font-size: 0.76rem;
+  color: var(--clay-deep);
+}
+
+.file-list {
+  list-style: none;
   display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  white-space: nowrap;
-}
-.refresh-btn:hover {
-  border-color: var(--amber);
-  color: var(--amber);
-}
-
-/* Generate section */
-.generate-card {
-  background: var(--ink-light);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 1.5rem;
-}
-
-.generate-input-wrap {
-  display: flex;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: var(--ink);
-  transition: border-color 0.25s, box-shadow 0.25s;
-}
-.generate-input-wrap:focus-within {
-  border-color: var(--teal);
-  box-shadow: 0 0 0 3px var(--teal-ghost);
-}
-
-.generate-input {
-  flex: 1;
-  border: none;
-  padding: 0.9rem 1.2rem;
-  font-size: 0.95rem;
-  background: transparent;
-  color: var(--paper);
-}
-.generate-input::placeholder {
-  color: var(--paper-muted);
-  opacity: 0.5;
-}
-
-.generate-btn {
-  padding: 0.9rem 1.8rem;
-  background: var(--teal);
-  color: white;
-  font-weight: 600;
-  font-size: 0.88rem;
-  letter-spacing: 0.03em;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  white-space: nowrap;
-}
-.generate-btn:hover:not(:disabled) {
-  filter: brightness(1.15);
-}
-
-.generating-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.gen-dot {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: white;
-  animation: pulse-glow 1.2s ease-in-out infinite;
-}
-
-.generate-hint {
-  margin-top: 0.8rem;
-  font-size: 0.72rem;
-  color: var(--paper-muted);
-  letter-spacing: 0.03em;
-}
-
-/* Error */
-.error-msg {
-  margin-top: 1.2rem;
-  padding: 1rem 1.2rem;
-  color: var(--red);
-  background: var(--red-ghost);
-  border: 1px solid rgba(196, 75, 60, 0.25);
-  border-radius: var(--radius);
-  font-size: 0.85rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-/* Report output */
-.report-output {
-  margin-top: 2.5rem;
-}
-
-.output-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: 0.4rem;
+  margin: -1rem 0 1.6rem;
+}
+.file-list li {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+  background: var(--paper-sunken);
+  border-radius: 4px;
+  padding: 0.2rem 0.55rem;
 }
 
-.output-title {
-  font-size: 1.15rem;
-  color: var(--paper);
-  font-family: var(--font-display);
-  font-weight: 400;
+/* —— 生成区 —— */
+.generate {
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 1.3rem 1.4rem 1.2rem;
+  margin-bottom: 1.6rem;
 }
 
-.output-actions {
+.field-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 0.6rem;
+}
+
+.generate-row {
   display: flex;
   gap: 0.6rem;
 }
 
-.action-btn {
-  padding: 0.5rem 1.2rem;
-  background: var(--ink-light);
-  color: var(--amber);
-  font-size: 0.8rem;
-  border: 1px solid var(--amber-ghost);
-  border-radius: 20px;
+.generate-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.72rem 0.9rem;
+  font-size: 0.92rem;
+  background: var(--paper);
+  border-color: var(--line-strong);
+  border-radius: var(--radius);
+}
+.generate-input:focus {
+  background: var(--paper-raised);
+}
+
+.generate-hint {
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--ink-ghost);
+}
+
+/* —— 生成中 —— */
+.generating-panel {
+  margin-top: 1.4rem;
+  overflow: hidden;
+}
+
+.generating-body {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  transition: border-color 0.2s, background 0.2s;
+  gap: 1rem;
+  padding: 1.6rem 1.5rem;
 }
-.action-btn:hover {
-  border-color: var(--amber);
-  background: var(--amber-ghost);
+
+.spinner.big {
+  width: 22px;
+  height: 22px;
+  border-width: 2.5px;
+  color: var(--navy-soft);
+  flex-shrink: 0;
+}
+
+.generating-title {
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.generating-desc {
+  font-size: 0.79rem;
+  color: var(--ink-faint);
+}
+
+/* 底部一条来回扫描的光带，比转圈更能表达"长任务进行中" */
+.scan-bar {
+  height: 2px;
+  background: var(--paper-sunken);
+  overflow: hidden;
+}
+.scan-bar span {
+  display: block;
+  width: 34%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, var(--clay), transparent);
+  animation: scan 1.7s var(--ease-soft) infinite;
+}
+
+@keyframes scan {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+/* —— 结果 —— */
+.output {
+  margin-top: 0.5rem;
+}
+
+.output-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.9rem;
+}
+
+.output-title {
+  font-family: var(--font-body);
+  font-size: 0.98rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.output-actions {
+  display: flex;
+  gap: 0.5rem;
 }
 
 .report-frame {
-  background: var(--ink-light);
-  color: var(--paper);
-  padding: 2.5rem;
-  border: 1px solid var(--border);
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  max-height: 75vh;
+  box-shadow: var(--shadow-sm);
+  padding: 2.2rem 2.4rem;
+  max-height: 74vh;
   overflow-y: auto;
-  font-size: 0.9rem;
-  line-height: 1.85;
 }
-.report-frame :deep(h1),
-.report-frame :deep(h2),
-.report-frame :deep(h3) {
-  font-family: var(--font-display);
-  color: var(--amber);
-  margin: 1.5em 0 0.5em;
-}
-.report-frame :deep(h1) { font-size: 1.8rem; }
-.report-frame :deep(h2) { font-size: 1.4rem; }
-.report-frame :deep(h3) { font-size: 1.1rem; }
-.report-frame :deep(p) { margin-bottom: 0.8em; }
-.report-frame :deep(strong) { color: var(--paper); }
-.report-frame :deep(a) { color: var(--amber); }
-.report-frame :deep(blockquote) {
-  border-left: 2px solid var(--amber);
-  padding-left: 1rem;
-  margin-left: 0;
-  color: var(--paper-dim);
-}
-.report-frame :deep(code) {
-  background: var(--ink);
-  padding: 0.2em 0.5em;
-  border-radius: 3px;
-  font-size: 0.85em;
-}
-.report-frame :deep(table) {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 1em 0;
-}
-.report-frame :deep(th),
-.report-frame :deep(td) {
-  padding: 0.6em 1em;
-  border: 1px solid var(--border);
-  text-align: left;
-}
-.report-frame :deep(th) {
-  background: var(--ink);
-  color: var(--amber);
-  font-weight: 500;
+
+@media (max-width: 620px) {
+  .generate-row {
+    flex-direction: column;
+  }
+  .status-strip {
+    gap: 1.2rem;
+  }
+  .status-tip {
+    margin-left: 0;
+  }
+  .report-frame {
+    padding: 1.4rem 1.1rem;
+  }
 }
 </style>

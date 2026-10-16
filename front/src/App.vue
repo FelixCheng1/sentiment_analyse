@@ -2,8 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useSSE } from './composables/useSSE.js'
 import { TABS } from './constants/navigation.js'
-import AppHeader from './components/AppHeader.vue'
-import AppNav from './components/AppNav.vue'
+import AppSidebar from './components/AppSidebar.vue'
 import ResearchView from './views/ResearchView.vue'
 import ReportView from './views/ReportView.vue'
 import HostDiscussionView from './views/HostDiscussionView.vue'
@@ -17,41 +16,59 @@ onMounted(() => connect())
 </script>
 
 <template>
-  <div class="app-shell">
-    <div class="accent-bar"></div>
-    <AppHeader :connected="connected" />
-    <AppNav
+  <div class="shell">
+    <AppSidebar
       v-model:activeTab="activeTab"
       :tabs="TABS"
-      :completedRoles="completedRoles"
+      :connected="connected"
+      :completed-roles="completedRoles"
     />
 
-    <main class="app-main">
-      <ResearchView
-        v-show="activeTab === 'research'"
-        :roleProgress="roleProgress"
-        :roleResults="roleResults"
-        @research-started="clearResearchState"
-      />
-      <ReportView v-show="activeTab === 'report'" />
-      <HostDiscussionView v-show="activeTab === 'host'" />
-      <ConfigView v-show="activeTab === 'config'" />
+    <main class="workspace">
+      <div class="workspace-inner">
+        <ResearchView
+          v-show="activeTab === 'research'"
+          :role-progress="roleProgress"
+          :role-results="roleResults"
+          @research-started="clearResearchState"
+        />
+        <ReportView v-show="activeTab === 'report'" />
+        <HostDiscussionView v-show="activeTab === 'host'" />
+        <ConfigView v-show="activeTab === 'config'" />
+      </div>
     </main>
   </div>
 </template>
 
 <style scoped>
-.accent-bar {
-  position: fixed; top: 0; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, transparent, var(--amber), transparent);
-  opacity: 0.6;
-  z-index: 10;
-  animation: pulse-glow 4s ease-in-out infinite;
+.shell {
+  display: flex;
+  min-height: 100vh;
 }
 
-.app-main {
-  padding: 0;
-  max-width: 1440px;
+.workspace {
+  flex: 1;
+  min-width: 0;
+  margin-left: var(--sidebar-w);
+}
+
+.workspace-inner {
+  max-width: 1120px;
   margin: 0 auto;
+  padding: 2.6rem 2.4rem 4rem;
+}
+
+@media (max-width: 900px) {
+  .shell {
+    flex-direction: column;
+  }
+
+  .workspace {
+    margin-left: 0;
+  }
+
+  .workspace-inner {
+    padding: 1.6rem 1.1rem 3rem;
+  }
 }
 </style>

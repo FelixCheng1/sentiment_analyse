@@ -1,23 +1,23 @@
 export const CONFIG_GROUPS = {
   'LLM 模型': [
-    ['INSIGHT_ENGINE_MODEL_NAME', 'Insight 模型', false],
-    ['INSIGHT_ENGINE_MODEL_PROVIDER', 'Insight Provider', false],
-    ['MEDIA_ENGINE_MODEL_NAME', 'Media 模型', false],
-    ['MEDIA_ENGINE_MODEL_PROVIDER', 'Media Provider', false],
-    ['REPORT_ENGINE_MODEL_NAME', 'Report 模型', false],
-    ['REPORT_ENGINE_MODEL_PROVIDER', 'Report Provider', false],
-    ['HOST_MODEL_NAME', 'Host 模型', false],
-    ['HOST_MODEL_PROVIDER', 'Host Provider', false],
+    ['INSIGHT_ENGINE_MODEL_NAME', '数据挖掘引擎模型', false],
+    ['INSIGHT_ENGINE_MODEL_PROVIDER', '数据挖掘引擎提供方', false],
+    ['MEDIA_ENGINE_MODEL_NAME', '舆情分析引擎模型', false],
+    ['MEDIA_ENGINE_MODEL_PROVIDER', '舆情分析引擎提供方', false],
+    ['REPORT_ENGINE_MODEL_NAME', '报告引擎模型', false],
+    ['REPORT_ENGINE_MODEL_PROVIDER', '报告引擎提供方', false],
+    ['HOST_MODEL_NAME', '主持人模型', false],
+    ['HOST_MODEL_PROVIDER', '主持人提供方', false],
   ],
   'API 密钥': [
-    ['INSIGHT_ENGINE_API_KEY', 'Insight API Key', true],
-    ['INSIGHT_ENGINE_BASE_URL', 'Insight Base URL', false],
-    ['MEDIA_ENGINE_API_KEY', 'Media API Key', true],
-    ['MEDIA_ENGINE_BASE_URL', 'Media Base URL', false],
-    ['REPORT_ENGINE_API_KEY', 'Report API Key', true],
-    ['REPORT_ENGINE_BASE_URL', 'Report Base URL', false],
-    ['HOST_API_KEY', 'Host API Key', true],
-    ['HOST_BASE_URL', 'Host Base URL', false],
+    ['INSIGHT_ENGINE_API_KEY', '数据挖掘引擎 API Key', true],
+    ['INSIGHT_ENGINE_BASE_URL', '数据挖掘引擎 Base URL', false],
+    ['MEDIA_ENGINE_API_KEY', '舆情分析引擎 API Key', true],
+    ['MEDIA_ENGINE_BASE_URL', '舆情分析引擎 Base URL', false],
+    ['REPORT_ENGINE_API_KEY', '报告引擎 API Key', true],
+    ['REPORT_ENGINE_BASE_URL', '报告引擎 Base URL', false],
+    ['HOST_API_KEY', '主持人 API Key', true],
+    ['HOST_BASE_URL', '主持人 Base URL', false],
   ],
   '搜索工具': [
     ['SEARCH_SWITCH', '搜索工具类型', false],
@@ -33,6 +33,13 @@ export const CONFIG_GROUPS = {
     ['DB_NAME', '数据库名称', false],
     ['DB_USER', '数据库用户', false],
   ],
+}
+
+export const GROUP_NOTES = {
+  'LLM 模型': '四个角色各自独立配置，需支持 function calling。',
+  'API 密钥': '密钥仅显示部分内容，留空表示不修改。',
+  '搜索工具': '决定联网检索走哪家服务，切换后需填写对应密钥。',
+  '数据库': '数据挖掘引擎检索私域库的连接信息，密码不在此处修改。',
 }
 
 export const SEARCH_TOOL_OPTIONS = [
